@@ -687,38 +687,6 @@ def main():
   HALLWAY_SPAWN_X = HALLWAY_OFFSET_X + int(HALLWAY_W * 0.150)
   HALLWAY_SPAWN_Y = HALLWAY_OFFSET_Y + int(HALLWAY_H * 0.185)
 
-  LIFT_RECT = pygame.Rect(
-    HALLWAY_OFFSET_X + 1125,
-    HALLWAY_OFFSET_Y + 525,
-    145,
-    210,
-  )
-
-  LIFT_INTERACT_RECT = pygame.Rect(
-    HALLWAY_OFFSET_X + 1015,
-    HALLWAY_OFFSET_Y + 610,
-    110,
-    145,
-  )
-
-  LIFT_PLAYER_X = HALLWAY_OFFSET_X + 1195
-  LIFT_PLAYER_Y = HALLWAY_OFFSET_Y + 650
-
-  lift_active = False
-  lift_cutscene_timer = 0
-  lift_floor = 3
-  lift_cutscene_stage = 0
-
-  in_circuit_room = False
-  CIRCUIT_ROOM_W = 1100
-  CIRCUIT_ROOM_H = 700
-
-  CIRCUIT_OFFSET_X = (WIDTH - CIRCUIT_ROOM_W) // 2
-  CIRCUIT_OFFSET_Y = (HEIGHT - CIRCUIT_ROOM_H) // 2
-
-  CIRCUIT_SPAWN_X = CIRCUIT_OFFSET_X + 550
-  CIRCUIT_SPAWN_Y = CIRCUIT_OFFSET_Y + 560
-
   player = Player(INITIAL_ROOM_SPAWN_X, INITIAL_ROOM_SPAWN_Y)
   in_hallway = False
 
@@ -1148,48 +1116,6 @@ def main():
       pygame.Rect(ROOM_OFFSET_X + -7, ROOM_OFFSET_Y + 507, 80, 250),
   ]
 
-  circuit_walls = [
-      # Top wall
-      pygame.Rect(
-          CIRCUIT_OFFSET_X,
-          CIRCUIT_OFFSET_Y,
-          CIRCUIT_ROOM_W,
-          35
-      ),
-
-      # Bottom wall
-      pygame.Rect(
-          CIRCUIT_OFFSET_X,
-          CIRCUIT_OFFSET_Y + CIRCUIT_ROOM_H - 35,
-          CIRCUIT_ROOM_W,
-          35
-      ),
-
-      # Left wall
-      pygame.Rect(
-          CIRCUIT_OFFSET_X,
-          CIRCUIT_OFFSET_Y,
-          35,
-          CIRCUIT_ROOM_H
-      ),
-
-      # Right wall
-      pygame.Rect(
-          CIRCUIT_OFFSET_X + CIRCUIT_ROOM_W - 35,
-          CIRCUIT_OFFSET_Y,
-          35,
-          CIRCUIT_ROOM_H
-      ),
-
-      # Breaker panel obstacle
-      pygame.Rect(
-          CIRCUIT_OFFSET_X + 470,
-          CIRCUIT_OFFSET_Y + 90,
-          160,
-          80
-      ),
-  ]
-
   room_exit_door = pygame.Rect(
       ROOM_OFFSET_X + 434, ROOM_OFFSET_Y + 752, 128, 40
   )
@@ -1373,109 +1299,97 @@ def main():
       ),
   ]
 
-  while True:
-    for event in pygame.event.get():
-      if event.type == pygame.QUIT:
-        pygame.quit()
-        sys.exit()
+while True:
+  for event in pygame.event.get():
+    if event.type == pygame.QUIT:
+      pygame.quit()
+      sys.exit()
 
-      elif event.type == pygame.KEYDOWN:
-        if event.key == pygame.K_ESCAPE:
-          if current_state == STATE_GAMEPLAY:
-            # Toggle pause menu on ESC
-            is_paused = not is_paused
-            if is_paused:
-              try:
-                pygame.mixer.music.load("assets/audio/music/menu1.mp3")
-                pygame.mixer.music.set_volume(0.2)
-                pygame.mixer.music.play(-1)
-              except pygame.error:
-                pass
-            else:
-              pygame.mixer.music.stop()
+    elif event.type == pygame.KEYDOWN:
+      if event.key == pygame.K_ESCAPE:
+        if current_state == STATE_GAMEPLAY:
+          # Toggle pause menu on ESC
+          is_paused = not is_paused
+          if is_paused:
+            try:
+              pygame.mixer.music.load("assets/audio/music/menu1.mp3")
+              pygame.mixer.music.set_volume(0.2)
+              pygame.mixer.music.play(-1)
+            except pygame.error:
+              pass
           else:
-            pygame.quit()
-            sys.exit()
+            pygame.mixer.music.stop()
+        else:
+          pygame.quit()
+          sys.exit()
 
-        elif (
-            event.key == pygame.K_q and current_state == STATE_GAMEPLAY and is_paused
-        ):
-          # Quit to main menu when pressing Q from the pause menu
-          current_state = STATE_MENU
-          is_paused = False
-          try:
-            pygame.mixer.music.load("assets/audio/music/intro1.mp3")
-            pygame.mixer.music.set_volume(0.5)
-            pygame.mixer.music.play(-1)
-          except pygame.error:
-            pass
+      elif (
+          event.key == pygame.K_q and current_state == STATE_GAMEPLAY and is_paused
+      ):
+        # Quit to main menu when pressing Q from the pause menu
+        current_state = STATE_MENU
+        is_paused = False
+        try:
+          pygame.mixer.music.load("assets/audio/music/intro1.mp3")
+          pygame.mixer.music.set_volume(0.5)
+          pygame.mixer.music.play(-1)
+        except pygame.error:
+          pass
 
-        elif current_state == STATE_MENU and event.key == pygame.K_RETURN:
-          if select_sound:
-            select_sound.play()
-          current_state = STATE_PROLOGUE
-          ui.reset_prologue()
+      elif current_state == STATE_MENU and event.key == pygame.K_RETURN:
+        if select_sound:
+          select_sound.play()
+        current_state = STATE_PROLOGUE
+        ui.reset_prologue()
 
-        elif current_state == STATE_PROLOGUE:
-          if event.key in (pygame.K_RIGHT, pygame.K_RETURN, pygame.K_SPACE):
-            is_done = ui.advance_prologue()
-            if is_done:
-              pygame.mixer.music.fadeout(1000)
-              current_state = STATE_GAMEPLAY
+      elif current_state == STATE_PROLOGUE:
+        if event.key in (pygame.K_RIGHT, pygame.K_RETURN, pygame.K_SPACE):
+          is_done = ui.advance_prologue()
+          if is_done:
+            pygame.mixer.music.fadeout(1000)
+            current_state = STATE_GAMEPLAY
 
-        elif current_state == STATE_GAMEPLAY and event.key == pygame.K_r:
-          player.x, player.y = INITIAL_ROOM_SPAWN_X, INITIAL_ROOM_SPAWN_Y
-          player.direction = "Down"
-          in_hallway = False
-          player.set_level_state(in_hallway)
-          is_paused = False
+      elif current_state == STATE_GAMEPLAY and event.key == pygame.K_r:
+        player.x, player.y = INITIAL_ROOM_SPAWN_X, INITIAL_ROOM_SPAWN_Y
+        player.direction = "Down"
+        in_hallway = False
+        player.set_level_state(in_hallway)
+        is_paused = False
 
-        elif (
-            current_state == STATE_GAMEPLAY
-            and not is_paused
-            and event.key == pygame.K_e
-        ):
-          if not in_hallway:
-            if player.is_hidden:
-              player.is_hidden = False
-              if active_cupboard:
-                name = active_cupboard["name"]
-                c_rect = active_cupboard["rect"]
-                if "Top-Left" in name or "Top-Right" in name:
-                  player.x = c_rect.centerx
-                  player.y = c_rect.bottom + 30
-                elif "Bottom-Left" in name:
-                  player.x = c_rect.centerx
-                  player.y = c_rect.top - 30
-                elif "Bottom-Right" in name:
-                  player.x = c_rect.left - 30
-                  player.y = c_rect.centery
-              active_cupboard = None
-              if select_sound:
-                select_sound.play()
-            else:
-              p_rect = player.get_rect()
-              for cup in cupboards:
-                if p_rect.colliderect(cup["rect"].inflate(40, 40)):
-                  player.is_hidden = True
-                  active_cupboard = cup
-                  player.x = cup["rect"].centerx
-                  player.y = cup["rect"].centery
-                  if select_sound:
-                    select_sound.play()
-                  break
+      elif (
+          current_state == STATE_GAMEPLAY
+          and not is_paused
+          and event.key == pygame.K_e
+      ):
+        if not in_hallway:
+          if player.is_hidden:
+            player.is_hidden = False
+            if active_cupboard:
+              name = active_cupboard["name"]
+              c_rect = active_cupboard["rect"]
+              if "Top-Left" in name or "Top-Right" in name:
+                player.x = c_rect.centerx
+                player.y = c_rect.bottom + 30
+              elif "Bottom-Left" in name:
+                player.x = c_rect.centerx
+                player.y = c_rect.top - 30
+              elif "Bottom-Right" in name:
+                player.x = c_rect.left - 30
+                player.y = c_rect.centery
+            active_cupboard = None
+            if select_sound:
+              select_sound.play()
           else:
-            if(
-              LIFT_INTERACT_RECT.colliderect(player.get_rect()) 
-              and not lift_active
-            ):
-              lift_active = True
-              lift_cutscene_timer = 0
-              lift_cutscene_stage = 0
-              player.x, player.y = LIFT_PLAYER_X, LIFT_PLAYER_Y
-              player.direction = "Up"
-              if select_sound:
-                select_sound.play()
+            p_rect = player.get_rect()
+            for cup in cupboards:
+              if p_rect.colliderect(cup["rect"].inflate(40, 40)):
+                player.is_hidden = True
+                active_cupboard = cup
+                player.x = cup["rect"].centerx
+                player.y = cup["rect"].centery
+                if select_sound:
+                  select_sound.play()
+                break
 
       elif event.type == pygame.MOUSEBUTTONDOWN:
         if event.button == 1 and current_state == STATE_PROLOGUE:
@@ -1485,7 +1399,7 @@ def main():
             if is_done:
               pygame.mixer.music.fadeout(1000)
               current_state = STATE_GAMEPLAY
-        elif event.button == 1 and current_state == STATE_GAMEPLAY and not is_paused:
+        elif current_state == STATE_GAMEPLAY and not is_paused:
           pause_btn_rect = pygame.Rect(WIDTH - 90, 20, 70, 35)
           if pause_btn_rect.collidepoint(event.pos):
             is_paused = True
@@ -1496,7 +1410,17 @@ def main():
             except pygame.error:
               pass
 
-    # --- FRAME RENDERING & UPDATE LOGIC (Properly outdented) ---
+    elif current_state == STATE_GAMEPLAY and not is_paused:
+        pause_btn_rect = pygame.Rect(WIDTH - 90, 20, 70, 35)
+        if pause_btn_rect.collidepoint(event.pos):
+          is_paused = True
+    try:
+      pygame.mixer.music.load("assets/audio/music/menu1.mp3")
+      pygame.mixer.music.set_volume(0.2)
+      pygame.mixer.music.play(-1)
+    except pygame.error:
+      pass
+
     if current_state == STATE_MENU:
       ui.draw_main_menu(screen)
     elif current_state == STATE_PROLOGUE:
@@ -1518,25 +1442,9 @@ def main():
           player.set_level_state(in_hallway)
           player.x, player.y = ROOM_DOOR_SPAWN_X, ROOM_DOOR_SPAWN_Y
           player.direction = "Up"
-        if not lift_active:
-          if in_circuit_room:
-            active_walls = circuit_walls
-          elif in_hallway:
-            active_walls = hallway_walls
-          else:
-            active_walls = room_walls
 
-          player.move(keys, active_walls)
-        if lift_active:
-          lift_cutscene_timer += 1
-          if lift_cutscene_timer< 60:
-            lift_cutscene_stage = 0
-            lift_floor = 4
-          elif lift_cutscene_timer < 120:
-            lift_cutscene_stage = 1
-            lift_floor = 3
-          elif lift_cutscene_timer < 180:
-            
+        active_walls = hallway_walls if in_hallway else room_walls
+        player.move(keys, active_walls)
 
         if in_hallway:
           current_time = pygame.time.get_ticks()
@@ -1575,9 +1483,10 @@ def main():
           fade_alpha = 255
           player.hearts = max(0, player.hearts - 1)
           
+          # Check if out of lives (Game Over)
           if player.hearts <= 0:
-            player.hearts = 3
-            current_state = STATE_MENU
+            player.hearts = 3  # Reset hearts for next playthrough
+            current_state = STATE_MENU  # Send back to start menu
             fade_state = "NONE"
             fade_alpha = 0
           else:
@@ -1585,7 +1494,7 @@ def main():
             player.set_level_state(in_hallway)
             player.x, player.y = INITIAL_ROOM_SPAWN_X, INITIAL_ROOM_SPAWN_Y
             player.direction = "Down"
-            hold_timer = 90
+            hold_timer = 90  # Extended black screen hold duration
             fade_state = "HOLD"
       elif fade_state == "HOLD":
         hold_timer -= 1
@@ -1636,21 +1545,6 @@ def main():
             hallway_img,
             (HALLWAY_OFFSET_X - camera_x, HALLWAY_OFFSET_Y - camera_y),
         )
-
-        if (
-          not is_paused
-          and fade_state == "NONE"
-          and not lift_active
-          and LIFT_INTERACT_RECT.colliderect(player.get_rect())
-        ):
-          draw_floating_prompt(
-            screen,
-            "[E] Enter Lift",
-            LIFT_INTERACT_RECT.centerx,
-            LIFT_INTERACT_RECT.top - 25,
-            small_pixel_font,
-          )
-
         draw_gold_indicator(screen, hallway_room_door, camera_x, camera_y)
 
         for cam in cameras:
@@ -1683,6 +1577,20 @@ def main():
         ui.draw_pause_button(screen)
       else:
         ui.draw_pause_menu(screen)
+
+
+        bar_w, bar_h, gap = 20, 80, 20
+        cx, cy = WIDTH // 2, HEIGHT // 2
+        pygame.draw.rect(
+            screen,
+            (240, 240, 240),
+            pygame.Rect(cx - bar_w - gap // 2, cy - bar_h // 2, bar_w, bar_h),
+        )
+        pygame.draw.rect(
+            screen,
+            (240, 240, 240),
+            pygame.Rect(cx + gap // 2, cy - bar_h // 2, bar_w, bar_h),
+        )
 
     pygame.display.flip()
     clock.tick(FPS)
