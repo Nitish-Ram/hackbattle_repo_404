@@ -25,14 +25,12 @@ class Player:
     self.is_moving = False
 
     self.in_room_level = True
-    self.radius = 20  # Radius when inside the room
+    self.radius = 20
 
-    # Pre-load animations for both room scale (64x64) and hallway scale (56x56)
     self.room_animations = self.load_animations(size=(64, 64))
     self.hallway_animations = self.load_animations(size=(56, 56))
 
   def set_level_state(self, in_hallway):
-    """Dynamically scales hitboxes and sprites based on current active level."""
     self.in_room_level = not in_hallway
     self.radius = 18 if in_hallway else 20
 
@@ -136,6 +134,88 @@ class Player:
       pygame.draw.circle(surface, (255, 255, 255), (pos_x, pos_y), self.radius)
 
 
+class SecurityCamera:
+
+  def __init__(
+      self,
+      x,
+      y,
+      base_angle_deg=90,
+      sweep_range_deg=180,
+      sweep_speed=0.006,
+      view_dist=160,
+      fov_deg=24,
+  ):
+    self.x = x
+    self.y = y
+    self.base_angle = math.radians(base_angle_deg)
+    self.sweep_range = math.radians(sweep_range_deg / 2)
+    self.sweep_speed = sweep_speed
+    self.view_dist = view_dist
+    self.fov = math.radians(fov_deg)
+
+    self.time = 0
+    self.current_angle = self.base_angle
+
+  def update(self):
+    self.time += self.sweep_speed
+    self.current_angle = (
+        self.base_angle + math.sin(self.time) * self.sweep_range
+    )
+
+  def detects_player(self, player):
+    px, py = player.x, player.y
+    dist = math.hypot(px - self.x, py - self.y)
+    if dist > self.view_dist:
+      return False
+
+    angle_to_player = math.atan2(py - self.y, px - self.x)
+    diff = (angle_to_player - self.current_angle + math.pi) % (
+        2 * math.pi
+    ) - math.pi
+    return abs(diff) <= (self.fov / 2)
+
+  def draw(self, surface, camera_x, camera_y):
+    screen_x = int(self.x - camera_x)
+    screen_y = int(self.y - camera_y)
+
+    # Offscreen Culling (saves rendering performance)
+    if not (
+        -self.view_dist <= screen_x <= WIDTH + self.view_dist
+        and -self.view_dist <= screen_y <= HEIGHT + self.view_dist
+    ):
+      return
+
+    # Fast Local Surface Blitting (Fixes 24 FPS Lag -> 60 FPS)
+    size = int(self.view_dist * 2)
+    local_center = (self.view_dist, self.view_dist)
+
+    left_angle = self.current_angle - (self.fov / 2)
+    right_angle = self.current_angle + (self.fov / 2)
+
+    p1 = local_center
+    p2 = (
+        local_center[0] + math.cos(left_angle) * self.view_dist,
+        local_center[1] + math.sin(left_angle) * self.view_dist,
+    )
+    p3 = (
+        local_center[0] + math.cos(right_angle) * self.view_dist,
+        local_center[1] + math.sin(right_angle) * self.view_dist,
+    )
+
+    cone_surface = pygame.Surface((size, size), pygame.SRCALPHA)
+    pygame.draw.polygon(cone_surface, (255, 30, 30, 85), [p1, p2, p3])
+    pygame.draw.line(cone_surface, (255, 80, 80, 200), p1, p2, 2)
+    pygame.draw.line(cone_surface, (255, 80, 80, 200), p1, p3, 2)
+
+    surface.blit(
+        cone_surface, (screen_x - self.view_dist, screen_y - self.view_dist)
+    )
+
+    pygame.draw.circle(surface, (40, 40, 40), (screen_x, screen_y), 9)
+    pygame.draw.circle(surface, (255, 50, 50), (screen_x, screen_y), 4)
+
+
 def create_fog_of_war_vignette(view_radius=340):
   vignette = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
   vignette.fill((0, 0, 0, 245))
@@ -187,7 +267,6 @@ def main():
   pygame.display.set_caption("Office Stealth Game")
   clock = pygame.time.Clock()
 
-  # Load Maps
   ROOM_W, ROOM_H = 1000, 850
   ROOM_OFFSET_X = (WIDTH - ROOM_W) // 2
   ROOM_OFFSET_Y = (HEIGHT - ROOM_H) // 2
@@ -204,16 +283,13 @@ def main():
       HALLWAY_H,
   )
 
-  # Spawn Positions
-  INITIAL_ROOM_SPAWN_X = ROOM_OFFSET_X + 850  # Next to top-right cupboard
+  INITIAL_ROOM_SPAWN_X = ROOM_OFFSET_X + 850
   INITIAL_ROOM_SPAWN_Y = ROOM_OFFSET_Y + 230
 
-  ROOM_DOOR_SPAWN_X = ROOM_OFFSET_X + 490  # Room bottom entrance door
+  ROOM_DOOR_SPAWN_X = ROOM_OFFSET_X + 490
   ROOM_DOOR_SPAWN_Y = ROOM_OFFSET_Y + 700
 
-  HALLWAY_SPAWN_X = HALLWAY_OFFSET_X + int(
-      HALLWAY_W * 0.150
-  )  # Right outside top-left door
+  HALLWAY_SPAWN_X = HALLWAY_OFFSET_X + int(HALLWAY_W * 0.150)
   HALLWAY_SPAWN_Y = HALLWAY_OFFSET_Y + int(HALLWAY_H * 0.185)
 
   player = Player(INITIAL_ROOM_SPAWN_X, INITIAL_ROOM_SPAWN_Y)
@@ -221,7 +297,162 @@ def main():
 
   fog_overlay = create_fog_of_war_vignette(view_radius=340)
 
-  # Room Hitboxes
+  cameras = [
+      SecurityCamera(
+          HALLWAY_OFFSET_X + int(HALLWAY_W * 0.429),
+          HALLWAY_OFFSET_Y + int(HALLWAY_H * 0.102),
+          base_angle_deg=58,
+          sweep_range_deg=180,
+          sweep_speed=0.006,
+          view_dist=160,
+          fov_deg=24,
+      ),
+      SecurityCamera(
+          HALLWAY_OFFSET_X + int(HALLWAY_W * 0.679),
+          HALLWAY_OFFSET_Y + int(HALLWAY_H * 0.354),
+          base_angle_deg=180,
+          sweep_range_deg=180,
+          sweep_speed=0.006,
+          view_dist=160,
+          fov_deg=24,
+      ),
+      SecurityCamera(
+          HALLWAY_OFFSET_X + int(HALLWAY_W * 0.383),
+          HALLWAY_OFFSET_Y + int(HALLWAY_H * 0.767),
+          base_angle_deg=300,
+          sweep_range_deg=180,
+          sweep_speed=0.006,
+          view_dist=160,
+          fov_deg=24,
+      ),
+      SecurityCamera(
+          HALLWAY_OFFSET_X + int(HALLWAY_W * 0.534),
+          HALLWAY_OFFSET_Y + int(HALLWAY_H * 0.855),
+          base_angle_deg=294,
+          sweep_range_deg=180,
+          sweep_speed=0.006,
+          view_dist=160,
+          fov_deg=24,
+      ),
+      SecurityCamera(
+          HALLWAY_OFFSET_X + int(HALLWAY_W * 0.584),
+          HALLWAY_OFFSET_Y + int(HALLWAY_H * 0.728),
+          base_angle_deg=90,
+          sweep_range_deg=180,
+          sweep_speed=0.006,
+          view_dist=160,
+          fov_deg=24,
+      ),
+      SecurityCamera(
+          HALLWAY_OFFSET_X + int(HALLWAY_W * 0.709),
+          HALLWAY_OFFSET_Y + int(HALLWAY_H * 0.535),
+          base_angle_deg=178,
+          sweep_range_deg=180,
+          sweep_speed=0.006,
+          view_dist=160,
+          fov_deg=24,
+      ),
+      SecurityCamera(
+          HALLWAY_OFFSET_X + int(HALLWAY_W * 0.517),
+          HALLWAY_OFFSET_Y + int(HALLWAY_H * 0.573),
+          base_angle_deg=68,
+          sweep_range_deg=180,
+          sweep_speed=0.006,
+          view_dist=160,
+          fov_deg=24,
+      ),
+      SecurityCamera(
+          HALLWAY_OFFSET_X + int(HALLWAY_W * 0.429),
+          HALLWAY_OFFSET_Y + int(HALLWAY_H * 0.412),
+          base_angle_deg=182,
+          sweep_range_deg=180,
+          sweep_speed=0.006,
+          view_dist=160,
+          fov_deg=24,
+      ),
+      SecurityCamera(
+          HALLWAY_OFFSET_X + int(HALLWAY_W * 0.307),
+          HALLWAY_OFFSET_Y + int(HALLWAY_H * 0.440),
+          base_angle_deg=90,
+          sweep_range_deg=180,
+          sweep_speed=0.006,
+          view_dist=160,
+          fov_deg=24,
+      ),
+      SecurityCamera(
+          HALLWAY_OFFSET_X + int(HALLWAY_W * 0.608),
+          HALLWAY_OFFSET_Y + int(HALLWAY_H * 0.122),
+          base_angle_deg=90,
+          sweep_range_deg=180,
+          sweep_speed=0.006,
+          view_dist=160,
+          fov_deg=24,
+      ),
+      SecurityCamera(
+          HALLWAY_OFFSET_X + int(HALLWAY_W * 0.799),
+          HALLWAY_OFFSET_Y + int(HALLWAY_H * 0.779),
+          base_angle_deg=136,
+          sweep_range_deg=180,
+          sweep_speed=0.006,
+          view_dist=160,
+          fov_deg=24,
+      ),
+      SecurityCamera(
+          HALLWAY_OFFSET_X + int(HALLWAY_W * 0.848),
+          HALLWAY_OFFSET_Y + int(HALLWAY_H * 0.611),
+          base_angle_deg=168,
+          sweep_range_deg=180,
+          sweep_speed=0.006,
+          view_dist=160,
+          fov_deg=24,
+      ),
+      SecurityCamera(
+          HALLWAY_OFFSET_X + int(HALLWAY_W * 0.694),
+          HALLWAY_OFFSET_Y + int(HALLWAY_H * 0.320),
+          base_angle_deg=274,
+          sweep_range_deg=180,
+          sweep_speed=0.006,
+          view_dist=160,
+          fov_deg=24,
+      ),
+      SecurityCamera(
+          HALLWAY_OFFSET_X + int(HALLWAY_W * 0.598),
+          HALLWAY_OFFSET_Y + int(HALLWAY_H * 0.295),
+          base_angle_deg=246,
+          sweep_range_deg=180,
+          sweep_speed=0.006,
+          view_dist=160,
+          fov_deg=24,
+      ),
+      SecurityCamera(
+          HALLWAY_OFFSET_X + int(HALLWAY_W * 0.270),
+          HALLWAY_OFFSET_Y + int(HALLWAY_H * 0.672),
+          base_angle_deg=78,
+          sweep_range_deg=180,
+          sweep_speed=0.006,
+          view_dist=160,
+          fov_deg=24,
+      ),
+      SecurityCamera(
+          HALLWAY_OFFSET_X + int(HALLWAY_W * 0.217),
+          HALLWAY_OFFSET_Y + int(HALLWAY_H * 0.581),
+          base_angle_deg=172,
+          sweep_range_deg=180,
+          sweep_speed=0.006,
+          view_dist=160,
+          fov_deg=24,
+      ),
+      SecurityCamera(
+          HALLWAY_OFFSET_X + int(HALLWAY_W * 0.176),
+          HALLWAY_OFFSET_Y + int(HALLWAY_H * 0.351),
+          base_angle_deg=90,
+          sweep_range_deg=140,
+          sweep_speed=0.006,
+          view_dist=160,
+          fov_deg=24,
+      ),
+  ]
+
   room_walls = [
       pygame.Rect(ROOM_OFFSET_X + 1, ROOM_OFFSET_Y + 0, 10, 848),
       pygame.Rect(ROOM_OFFSET_X + 931, ROOM_OFFSET_Y + 510, 72, 252),
@@ -240,12 +471,10 @@ def main():
       pygame.Rect(ROOM_OFFSET_X + -7, ROOM_OFFSET_Y + 507, 80, 250),
   ]
 
-  # Bottom Door Portal in Room
   room_exit_door = pygame.Rect(
       ROOM_OFFSET_X + 434, ROOM_OFFSET_Y + 752, 128, 40
   )
 
-  # Calibrated Top-Left Room Door in Hallway
   hallway_room_door = r_rect(
       HALLWAY_OFFSET_X,
       HALLWAY_OFFSET_Y,
@@ -257,7 +486,6 @@ def main():
       0.068,
   )
 
-  # Hallway Maze Hitboxes
   hallway_walls = [
       r_rect(
           HALLWAY_OFFSET_X,
@@ -652,14 +880,11 @@ def main():
 
     player_rect = player.get_rect()
 
-    # Room -> Hallway Transition
     if not in_hallway and player_rect.colliderect(room_exit_door):
       in_hallway = True
       player.set_level_state(in_hallway)
       player.x, player.y = HALLWAY_SPAWN_X, HALLWAY_SPAWN_Y
       player.direction = "Right"
-
-    # Hallway -> Room Transition
     elif in_hallway and player_rect.colliderect(hallway_room_door):
       in_hallway = False
       player.set_level_state(in_hallway)
@@ -668,6 +893,10 @@ def main():
 
     active_walls = hallway_walls if in_hallway else room_walls
     player.move(keys, active_walls)
+
+    if in_hallway:
+      for cam in cameras:
+        cam.update()
 
     if not in_hallway:
       camera_x, camera_y = 0, 0
@@ -709,6 +938,9 @@ def main():
               pygame.Rect(w.x - camera_x, w.y - camera_y, w.width, w.height),
               2,
           )
+
+      for cam in cameras:
+        cam.draw(screen, camera_x, camera_y)
 
       player.draw(screen, camera_x, camera_y)
       screen.blit(fog_overlay, (0, 0))
